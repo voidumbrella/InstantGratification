@@ -1,0 +1,209 @@
+[manifest]
+version = "1.0.0"
+dump_lua = true
+priority = 1
+
+# ========================= SET UP TIMER =========================
+
+#		Game:start_run
+# Set up timer.
+# This needs to be injected *during* the run setup because
+# the UI needs access to this table, but G.GAME is only set
+# during `Game.start_run` (which creates/loads a run)
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''G.playing_cards = {}'''
+match_indent = true
+position = "after"
+payload = '''
+if self.GAME.instagrad_timer == nil then
+	self.GAME.instagrad_timer = InstaGrad.timer
+	InstaGrad.update_timer()
+end
+'''
+
+# ========================= INGAME LOGIC =========================
+
+#		Game:update_selecting_hand
+# I don't know why this exists because it looks like a duplicate.
+# Hopefully something doesn't break because of this.
+# See the below patch.
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if #G.hand.cards < 1 and #G.deck.cards < 1 and #G.play.cards < 1 then
+		end_round()
+end
+'''
+match_indent = true
+position = "at"
+payload = ""
+
+#		Game:update_selecting_hand
+# If deck is empty, shuffle all the cards back into the deck at the expense of time.
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = '''if #G.hand.cards < 1 and #G.deck.cards < 1 then
+		end_round()
+else
+'''
+match_indent = true
+position = "at"
+payload = '''
+if #G.hand.cards < 1 and #G.deck.cards < 1 then
+	G.FUNCS.draw_from_discard_to_deck()
+	G.FUNCS.draw_from_deck_to_hand()
+	InstaGrad.update_blind_timer(-InstaGrad.timer.shuffle_time, true)
+else
+'''
+
+#		G.FUNCS.cash_out
+# Reset the timer at the end of round.
+# Remove references to discards and hands.
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''G.GAME.current_round.discards_left = math.max(0, G.GAME.round_resets.discards + G.GAME.round_bonus.discards)
+G.GAME.current_round.hands_left = (math.max(1, G.GAME.round_resets.hands + G.GAME.round_bonus.next_hands))
+'''
+match_indent = true
+position = "at"
+payload = '''
+InstaGrad.update_timer(nil, true, true)
+'''
+
+#		G.FUNCS.can_discard
+# Change discard condition to require time.
+[[patches]]
+[patches.pattern]
+target = "functions/button_callbacks.lua"
+pattern = '''if G.GAME.current_round.discards_left <= 0 or #G.hand.highlighted <= 0 then'''
+match_indent = true
+position = "at"
+payload = '''if G.GAME.instagrad_timer.real <= G.GAME.instagrad_timer.discard_time or #G.hand.highlighted <= 0 then'''
+
+#		G.FUNCS.evaluate_round
+[[patches]]
+[patches.pattern]
+target = "functions/state_events.lua"
+pattern = '''if G.GAME.current_round.hands_left > 0 and not G.GAME.modifiers.no_extra_hand_money then
+		add_round_eval_row({dollars = G.GAME.current_round.hands_left*(G.GAME.modifiers.money_per_hand or 1), disp = G.GAME.current_round.hands_left, bonus = true, name='hands', pitch = pitch})
+'''
+match_indent = true
+position = "at"
+payload = '''
+local time_intervals = math.floor(G.GAME.instagrad_timer.real / G.GAME.instagrad_timer.time_per_dollar)
+if time_intervals > 0 and not G.GAME.modifiers.no_extra_hand_money then
+		add_round_eval_row({
+			dollars = time_intervals * (G.GAME.modifiers.money_per_hand or 1),
+			disp = time_intervals,
+			bonus = true,
+			name = 'time',
+			pitch = pitch})
+'''
+
+
+# ========================= TIMER UI =========================
+#		create_UIBox_HUD
+# Replace hands and discards in the HUD with a timer.
+[[patches]]
+[patches.pattern]
+target = "functions/UI_definitions.lua"
+pattern = '''contents.round = {
+{n=G.UIT.R, config={align = "cm"}, nodes={
+	{n=G.UIT.C, config={id = 'hud_hands',align = "cm", padding = 0.05, minw = 1.45, colour = temp_col, emboss = 0.05, r = 0.1}, nodes={
+		{n=G.UIT.R, config={align = "cm", minh = 0.33, maxw = 1.35}, nodes={
+			{n=G.UIT.T, config={text = localize('k_hud_hands'), scale = 0.85*scale, colour = G.C.UI.TEXT_LIGHT, shadow = true}},
+		}},
+		{n=G.UIT.R, config={align = "cm", r = 0.1, minw = 1.2, colour = temp_col2}, nodes={
+			{n=G.UIT.O, config={object = DynaText({string = {{ref_table = G.GAME.current_round, ref_value = 'hands_left'}}, font = G.LANGUAGES['en-us'].font, colours = {G.C.BLUE},shadow = true, rotate = true, scale = 2*scale}),id = 'hand_UI_count'}},
+		}}
+	}},
+	{n=G.UIT.C, config={minw = spacing},nodes={}},
+	{n=G.UIT.C, config={align = "cm", padding = 0.05, minw = 1.45, colour = temp_col, emboss = 0.05, r = 0.1}, nodes={
+		{n=G.UIT.R, config={align = "cm", minh = 0.33, maxw = 1.35}, nodes={
+			{n=G.UIT.T, config={text = localize('k_hud_discards'), scale = 0.85*scale, colour = G.C.UI.TEXT_LIGHT, shadow = true}},
+		}},
+		{n=G.UIT.R, config={align = "cm"}, nodes={
+			{n=G.UIT.R, config={align = "cm", r = 0.1, minw = 1.2, colour = temp_col2}, nodes={
+				{n=G.UIT.O, config={object = DynaText({string = {{ref_table = G.GAME.current_round, ref_value = 'discards_left'}}, font = G.LANGUAGES['en-us'].font, colours = {G.C.RED},shadow = true, rotate = true, scale = 2*scale}),id = 'discard_UI_count'}},
+			}}
+		}},
+	}},
+}},
+'''
+match_indent = true
+position = "at"
+payload = '''
+contents.round = {
+	{
+		n = G.UIT.R,
+		config = { align = "cm" },
+		nodes = {
+			{
+				n = G.UIT.C,
+				config = { align = "cm", padding = 0.05, minw = 1.45 * 2 + spacing, minh = 1.15, colour = temp_col, emboss = 0.05, r = 0.1 },
+				nodes = {
+					{
+						n = G.UIT.R,
+						config = { align = "cm" },
+						nodes = {
+							{
+								n = G.UIT.C,
+								config = { align = "cm", r = 0.1, minw = 1.28 * 2 + spacing, minh = 1, colour = temp_col2 },
+								nodes = {
+									{
+										n = G.UIT.O,
+										config = {
+											object = DynaText({
+												string = { { ref_table = G.GAME.instagrad_timer, ref_value = "display" } },
+												maxw = 2.2,
+												colours = { G.C.UI.TEXT_LIGHT },
+												font = G.LANGUAGES["en-us"].font,
+												scale = 2.2 * scale,
+											}),
+											id = "instagrad_timer_UI",
+										}},
+								}},
+						}},
+				}},
+	}},
+'''
+#		add_round_eval-row
+# Cash-out display for time bonus
+[[patches]]
+[patches.pattern]
+target = "functions/common_events.lua"
+pattern = '''elseif config.name == 'interest' then
+	table.insert(left_text, {n=G.UIT.T, config={text = num_dollars, scale = 0.8*scale, colour = G.C.MONEY, shadow = true, juice = true}})
+	table.insert(left_text,{n=G.UIT.O, config={object = DynaText({string = {" "..localize{type = 'variable', key = 'interest', vars = {G.GAME.interest_amount, 5, G.GAME.interest_amount*G.GAME.interest_cap/5}}}, colours = {G.C.UI.TEXT_LIGHT}, shadow = true, pop_in = 0, scale = 0.4*scale, silent = true})}})
+'''
+match_indent = true
+position = 'after'
+payload = '''elseif config.name == 'time' then
+	table.insert(left_text, {n=G.UIT.T, config={text = config.disp or config.dollars, scale = 0.8*scale, colour = G.C.BLUE, shadow = true, juice = true}})
+	table.insert(
+		left_text,
+		{
+			n = G.UIT.O,
+			config = {
+				object = DynaText({
+					string = {
+						" " .. localize({
+							type = "variable",
+							key = "time_bonus",
+							vars = { G.GAME.modifiers.money_per_hand or 1, G.GAME.instagrad_timer.time_per_dollar },
+						}),
+					},
+					colours = { G.C.UI.TEXT_LIGHT },
+					shadow = true,
+					pop_in = 0,
+					scale = 0.4 * scale,
+					silent = true,
+				}),
+			},
+		}
+	)
+'''
