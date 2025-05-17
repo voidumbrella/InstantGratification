@@ -10,7 +10,7 @@ InstaGrad.timer = {
 	hand_time = 20, -- Time cost to play a hand
 	discard_time = 10, -- Time cost to discard cards
 	shuffle_time = 60, -- Time cost to shuffle deck if it's empty
-	time_per_dollar = 30, -- At end of round, earn $1 for time remaining
+	time_per_dollar = 25, -- At end of round, earn $1 for time remaining
 }
 
 -- ========================= BLIND TIMER =========================
