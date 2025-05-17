@@ -1,10 +1,10 @@
 {
   "id": "instagrad",
-  "name": "Instant Gratification",
+  "name": "InstantGratification",
   "author": ["void"],
   "description": "Real time Balatro action",
   "prefix": "instagrad",
-  "display_name": "Instant Gratification",
+  "display_name": "InstantGratification",
   "main_file": "main.lua",
   "badge_colour": "782C1F",
   "badge_text_colour": "FFFFFF",

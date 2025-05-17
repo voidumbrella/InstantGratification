@@ -7,8 +7,8 @@ InstaGrad.timer = {
 	real = 1,
 	display = "",
 	-- Configs (in seconds)
-	hand_time = 30, -- Time cost to play a hand
-	discard_time = 20, -- Time cost to discard cards
+	hand_time = 20, -- Time cost to play a hand
+	discard_time = 10, -- Time cost to discard cards
 	shuffle_time = 60, -- Time cost to shuffle deck if it's empty
 	time_per_dollar = 30, -- At end of round, earn $1 for time remaining
 }
@@ -70,7 +70,7 @@ function InstaGrad.update_timer(dt, flash, sfx)
 	end
 end
 
-local _Game_update = G.update
+local _Game_update = Game.update
 function Game:update(dt)
 	_Game_update(self, dt)
 
@@ -91,13 +91,24 @@ function Game:update(dt)
 	end
 end
 
--- Total overrides. If this breaks a mod then it was never compatible with this anyway.
-function ease_hands_played(mod, instant)
-	InstaGrad.update_timer(mod * G.GAME.instagrad_timer.hand_time, true, true)
+local _G_FUNCS_play_cards_from_highlighted = G.FUNCS.play_cards_from_highlighted
+function G.FUNCS.play_cards_from_highlighted(e, hook)
+	if e and e.config and e.config.id == "play_button" then
+		InstaGrad.update_timer(-G.GAME.instagrad_timer.hand_time, true, true)
+	end
+	_G_FUNCS_play_cards_from_highlighted(e, hook)
 end
-function ease_discard(mod, instant, silent)
-	InstaGrad.update_timer(mod * G.GAME.instagrad_timer.discard_time, true, true)
+
+local _G_FUNCS_discard_cards_from_highlighted = G.FUNCS.discard_cards_from_highlighted
+function G.FUNCS.discard_cards_from_highlighted(e, hook)
+	if e and e.config and e.config.id == "discard_button" then
+		InstaGrad.update_timer(-G.GAME.instagrad_timer.discard_time, true, true)
+	end
+	_G_FUNCS_discard_cards_from_highlighted(e, hook)
 end
+
+function ease_hands_played(mod, instant, silent) end
+function ease_discard(mod, instant, silent) end
 
 -- ========================= JOKER OVERRIDES =========================
 -- Just overriding a single Joker as a test.
@@ -111,7 +122,7 @@ SMODS.Joker:take_ownership("banner", {
 			local chips = card.ability.extra.chips * math.floor(G.GAME.instagrad_timer.real / card.ability.extra.time)
 			return {
 				chip_mod = chips,
-				message = localize({ type = "variable", key = "chips", vars = { chips } }),
+				message = localize({ type = "variable", key = "a_chips", vars = { chips } }),
 			}
 		end
 	end,
